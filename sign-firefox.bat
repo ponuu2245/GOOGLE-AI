@@ -11,7 +11,7 @@ if "%AMO_JWT_ISSUER%"=="" goto nokey
 if "%AMO_JWT_SECRET%"=="" goto nokey
 
 call npx --yes web-ext@8 sign ^
-  --source-dir "%~dp0extension-firefox" ^
+  --source-dir "%~dp0extension" ^
   --artifacts-dir "%~dp0dist" ^
   --channel unlisted ^
   --api-key "%AMO_JWT_ISSUER%" ^

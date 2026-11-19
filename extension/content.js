@@ -12,6 +12,8 @@
   let scanTimer = null;
   const processedCalls = new Set();
   const writeCards = new Map(); // 수정 카드는 상태(미리보기·적용 여부)를 지녀서 다시 만들지 않고 옮겨 붙인다
+  const runCount = new Map(); // 자동 실행한 횟수. 같은 읽기 요청이 새 답변에 또 나오면 다시 실행한다
+  const isAiMode = () => new URLSearchParams(location.search).get('udm') === '50';
 
   // 지침 안에는 JSON 예시를 넣지 않아 지침 자체가 도구 호출로 잡히지 않는다.
   // "[시스템 지침: ...]" 같은 명령조 문구는 AI 모드가 답을 거부해서 대화체로 쓴다.
@@ -241,36 +243,40 @@
     document.querySelectorAll('.gmcp-card').forEach(c => { if (!c.gmcpNode?.isConnected) c.remove(); });
     document.querySelectorAll('pre, code, p, div, span').forEach(node => {
       if (node.closest('#gmcp-panel, .gmcp-card, textarea, [contenteditable="true"]')) return;
-      const text = node.innerText || '';
-      if (!text.includes('mcp_tool')) return;
+      // innerText는 레이아웃을 매번 다시 계산하고 공백을 줄여 JSON이 망가지므로 textContent만 쓴다
+      const text = node.textContent || '';
       // 내가 보낸 지침·결과 말풍선은 건너뜀
-      if (text.includes(INSTR_MARK) || text.includes(RESULT_MARK)) return;
-      // 가장 안쪽 요소에만 카드를 붙인다 (자식이 이미 그 텍스트를 담고 있으면 자식에게 맡김)
-      if (Array.from(node.children).some(ch => !ch.classList.contains('gmcp-card') && (ch.innerText || '').includes('mcp_tool'))) return;
+      if (!text.includes('mcp_tool') || text.includes(INSTR_MARK) || text.includes(RESULT_MARK)) return;
+      const calls = extractCalls(text);
+      // 호출 JSON 전체를 담은 가장 안쪽 요소에만 카드를 붙인다.
+      // 코드 블록은 토큰마다 span으로 쪼개져 있어 'mcp_tool' 글자가 든 요소로 고르면 JSON이 잘린다.
+      if (!calls.length || Array.from(node.children).some(ch => !ch.classList.contains('gmcp-card') && extractCalls(ch.textContent || '').length)) return;
+      const anchor = node.closest('pre') || node; // 코드 블록 안이 아니라 바로 아래에 붙인다
 
-      // innerText는 연속 공백을 하나로 줄여 들여쓰기가 망가지므로, JSON은 textContent에서 뽑는다
-      extractCalls(node.textContent || '').forEach(call => {
+      calls.forEach(call => {
         // 적용 여부는 사용자만 정한다: AI가 넣은 apply 값은 버린다
         if (call.args && typeof call.args === 'object') delete call.args.apply;
         else call.args = {};
         const sig = `${call.mcp_tool}:${JSON.stringify(call.args || {})}`;
-        const bound = (node.dataset.gmcpBound || '').split('\n');
+        // 표시는 카드를 붙이는 요소에 단다: 구글이 코드 블록 안쪽만 다시 그려도 카드가 겹치지 않게
+        const bound = (anchor.dataset.gmcpBound || '').split('\n');
         if (bound.includes(sig)) return;
-        node.dataset.gmcpBound = [...bound, sig].filter(Boolean).join('\n');
+        anchor.dataset.gmcpBound = [...bound, sig].filter(Boolean).join('\n');
 
         // 같은 수정 요청이 다시 그려져도 미리보기·자동 적용이 두 번 일어나지 않게 한 번만 만든다
         if (WRITE_TOOLS.includes(call.mcp_tool) && processedCalls.has(sig)) {
           const old = writeCards.get(sig);
-          if (old) { old.gmcpNode = node; node.parentElement?.insertBefore(old, node.nextSibling); }
+          if (old) { old.gmcpNode = anchor; anchor.parentElement?.insertBefore(old, anchor.nextSibling); }
           return;
         }
         const { card, run } = makeCard(call, sig);
-        card.gmcpNode = node;
-        node.parentElement?.insertBefore(card, node.nextSibling);
+        card.gmcpNode = anchor;
+        anchor.parentElement?.insertBefore(card, anchor.nextSibling);
         if (WRITE_TOOLS.includes(call.mcp_tool)) { processedCalls.add(sig); writeCards.set(sig, card); }
-        else if (autoRun && run && !processedCalls.has(sig)) {
-          processedCalls.add(sig);
-          run();
+        else if (autoRun && run) {
+          // 다시 그려진 같은 답변은 화면의 카드 수가 그대로라 한 번만, 새 답변의 같은 요청은 카드가 늘어 다시 실행
+          const shown = Array.from(document.querySelectorAll('.gmcp-card')).filter(c => c.dataset.sig === sig).length;
+          if (shown > (runCount.get(sig) || 0)) { runCount.set(sig, shown); run(); }
         }
       });
     });
@@ -300,19 +306,22 @@
     document.body.appendChild(panel);
 
     let timer = null;
+    // 글자가 바뀔 때만 쓴다: 매번 쓰면 MutationObserver가 4초마다 화면 전체를 다시 훑는다
+    const setText = (el, t) => { if (el.textContent !== t) el.textContent = t; };
     const checkServer = async () => {
       const st = document.getElementById('gmcp-status');
       const rt = document.getElementById('gmcp-root');
       if (!st || !rt) return clearInterval(timer);
+      setText(document.getElementById('gmcp-inject-instr'), isAiMode() ? '1. 지침 프롬프트 넣기' : '1. 지침 넣고 AI 모드 시작');
       const res = await sendBgMessage({ type: 'MCP_HEALTH' });
       if (res.ok && res.data?.rootDir) {
         st.style.color = '#188038';
-        st.textContent = '● 연결됨';
-        rt.textContent = `📁 ${res.data.rootDir}`;
+        setText(st, '● 연결됨');
+        setText(rt, `📁 ${res.data.rootDir}`);
       } else {
         st.style.color = '#d93025';
-        st.textContent = '● 서버 꺼짐';
-        rt.textContent = '터미널에서 node server.js "폴더" 실행 필요';
+        setText(st, '● 서버 꺼짐');
+        setText(rt, '터미널에서 node server.js "폴더" 실행 필요');
       }
     };
     checkServer();
@@ -321,7 +330,13 @@
     document.getElementById('gmcp-inject-instr').onclick = () => {
       const input = findAiModeInput();
       const current = (input?.value ?? input?.innerText ?? '').trim();
-      setInputValue(input, MCP_INSTRUCTION + (current || '로컬 폴더에 어떤 파일이 있는지 조회해서 알려줘.'));
+      const prompt = MCP_INSTRUCTION + (current || '로컬 폴더에 어떤 파일이 있는지 조회해서 알려줘.');
+      // 홈·일반 검색 화면: 지침을 첫 질문으로 실어 AI 모드를 바로 연다
+      if (!isAiMode()) {
+        location.href = `${location.origin}/search?udm=50&q=${encodeURIComponent(prompt)}`;
+        return;
+      }
+      setInputValue(input, prompt);
     };
     document.getElementById('gmcp-quick-list').onclick = () => {
       executeMcpTool({ mcp_tool: 'list_dir', args: { path: '.' } }, document.getElementById('gmcp-root'));

@@ -21,7 +21,7 @@ if (!fs.existsSync(rawRoot) || !fs.statSync(rawRoot).isDirectory()) {
 
 const ROOT_DIR = fs.realpathSync(path.resolve(rawRoot));
 const ALLOWED_HOSTS = new Set([`127.0.0.1:${PORT}`, `localhost:${PORT}`]);
-const MAX_OUT = 2600; // AI 모드 입력창에 넣을 결과 최대 글자 수
+const MAX_OUT = 7000; // AI 모드 입력창(최대 8192자)에 넣을 결과 최대 글자 수
 
 // 민감 파일·폴더 차단 (대소문자 무시)
 const BLOCKED_NAME = /^(\.env(\..*)?|id_rsa.*|id_ed25519.*|id_ecdsa.*|.*\.(pem|key|p12|pfx|kdbx))$/i;
@@ -238,12 +238,20 @@ const server = http.createServer((req, res) => {
   if (req.url.startsWith('/s/')) return handleShare(req, res);
 
   // 아래 API는 이 컴퓨터의 확장 프로그램 전용.
-  // CORS 헤더를 주지 않는다: 일반 웹사이트는 응답을 읽을 수 없다.
   // Host 검사: DNS 리바인딩·터널 경유 차단. Origin 검사: 크롬·파이어폭스 확장 프로그램 또는 Origin 없는 요청(curl)만.
   const origin = req.headers.origin;
   if (!ALLOWED_HOSTS.has(req.headers.host || '') || req.headers['cf-connecting-ip'] ||
       (origin && !/^(chrome|moz)-extension:\/\//.test(origin))) {
     return send(res, 403, { ok: false, error: '허용되지 않은 출처입니다.' });
+  }
+  // CORS는 위를 통과한 확장 프로그램 출처에만 연다. 파이어폭스는 호스트 권한이 있어도 이 헤더가 없으면 응답을 버린다.
+  if (origin) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Vary', 'Origin');
+  }
+  if (req.method === 'OPTIONS') {
+    res.writeHead(204, { 'Access-Control-Allow-Methods': 'GET, POST', 'Access-Control-Allow-Headers': 'Content-Type', 'Access-Control-Max-Age': '600' });
+    return res.end();
   }
 
   if (req.method === 'GET' && req.url === '/health') {

@@ -1,10 +1,20 @@
 {
   "manifest_version": 3,
   "name": "Google AI Mode Local Bridge",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "description": "구글 검색 AI 모드에서 로컬 폴더 목록·파일 내용을 읽어 입력창에 넣어 줍니다.",
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "google-ai-local-bridge@local",
+      "strict_min_version": "128.0",
+      "data_collection_permissions": {
+        "required": ["none"]
+      }
+    }
+  },
   "background": {
-    "service_worker": "background.js"
+    "service_worker": "background.js",
+    "scripts": ["background.js"]
   },
   "host_permissions": [
     "http://127.0.0.1:3006/*"
@@ -12,9 +22,15 @@
   "content_scripts": [
     {
       "matches": [
+        "*://*.google.com/",
+        "*://*.google.com/?*",
+        "*://*.google.com/webhp*",
         "*://*.google.com/search*",
-        "*://*.google.co.kr/search*",
         "*://*.google.com/ai*",
+        "*://*.google.co.kr/",
+        "*://*.google.co.kr/?*",
+        "*://*.google.co.kr/webhp*",
+        "*://*.google.co.kr/search*",
         "*://*.google.co.kr/ai*"
       ],
       "js": ["content.js"],

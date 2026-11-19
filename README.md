@@ -29,11 +29,11 @@ node server.js "E:\내\프로젝트\폴더"
 1. https://addons.mozilla.org/developers/addon/api/key/ 에 파이어폭스 계정으로 로그인 → 개발자 약관 동의 → **새 자격 증명 생성**
 2. 나온 **JWT issuer**(user:… 형태)와 **JWT secret**을 메모 (남에게 보여 주지 마세요)
 3. `sign-firefox.bat` 더블클릭 → 두 값을 붙여 넣기. 처음에는 `npx`가 web-ext를 내려받습니다. 서명은 보통 몇 분 걸립니다.
-4. `dist` 폴더에 생긴 서명된 `.xpi`를 파이어폭스 창에 끌어다 놓고 **추가**
+4. `dist` 폴더에 새로 생긴 서명된 `.xpi`(이름에 `-unsigned`가 없는 것)를 파이어폭스 창에 끌어다 놓고 **추가**. `-unsigned.xpi`를 넣으면 "확인되지 않음"으로 거부됩니다.
 5. 코드를 고쳐 다시 서명할 때는 `extension\manifest.json`의 `version`을 올려야 합니다(같은 버전은 다시 서명 안 됨).
 
 **B. 서명 없이 영구 설치 (Firefox Developer Edition 또는 Nightly만 가능)**
-1. `build-firefox.bat` 실행 → `dist\google-ai-local-bridge.xpi` 생성
+1. `build-firefox.bat` 실행 → `dist\google-ai-local-bridge-unsigned.xpi` 생성
 2. Developer Edition/Nightly 주소창에 `about:config` → `xpinstall.signatures.required` 를 `false`로
 3. `.xpi`를 창에 끌어다 놓고 **추가**
 

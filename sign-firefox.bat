@@ -10,19 +10,25 @@ if "%AMO_JWT_SECRET%"=="" set /p AMO_JWT_SECRET=JWT secret 입력:
 if "%AMO_JWT_ISSUER%"=="" goto nokey
 if "%AMO_JWT_SECRET%"=="" goto nokey
 
+if not exist "%~dp0dist" mkdir "%~dp0dist"
 call npx --yes web-ext@8 sign ^
   --source-dir "%~dp0extension" ^
   --artifacts-dir "%~dp0dist" ^
   --channel unlisted ^
   --api-key "%AMO_JWT_ISSUER%" ^
   --api-secret "%AMO_JWT_SECRET%"
+rem 더블클릭으로 실행하면 끝나자마자 창이 닫히므로, 결과를 읽을 수 있게 pause 로 멈춘다
 if errorlevel 1 (
   echo 서명 실패. 위 오류를 확인하세요. 같은 버전은 두 번 서명되지 않으니 manifest.json 의 version 을 올려서 다시 하세요.
+  pause
   exit /b 1
 )
-echo 서명 완료. dist 폴더의 .xpi 파일을 파이어폭스 창에 끌어다 놓으면 설치됩니다.
+echo 서명 완료. 아래 파일 중 -unsigned 가 아닌 것을 파이어폭스 창에 끌어다 놓으면 설치됩니다.
+dir /b "%~dp0dist\*.xpi"
+pause
 exit /b 0
 
 :nokey
 echo 키가 없습니다. README 의 "파이어폭스 영구 설치" 를 보고 키를 먼저 받으세요.
+pause
 exit /b 1

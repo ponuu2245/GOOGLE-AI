@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Google AI Mode Local Bridge",
-  "version": "1.4.0",
+  "version": "1.4.1",
   "description": "구글 검색 AI 모드에서 로컬 폴더 목록·파일 내용을 읽어 입력창에 넣어 줍니다.",
   "browser_specific_settings": {
     "gecko": {
